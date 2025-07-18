@@ -135,9 +135,9 @@ def main():
         if st.button("🔔 Alerts", use_container_width=True):
             st.switch_page("pages/email_alerts.py")
     
-    # Add backtesting button
+    # Add backtesting button (full width)
     if st.sidebar.button("📈 Backtesting", use_container_width=True):
-        st.info("📈 Backtesting module coming soon!")
+        st.switch_page("pages/backtesting.py")
     
     st.sidebar.markdown("---")
     
