@@ -22,17 +22,26 @@ def calculate_persistence_entropy(prices, window=30):
         return np.random.uniform(0.5, 1.5)  # Mock entropy for demo
     
     try:
-        # Convert to clean numpy array
-        if hasattr(prices, 'values'):
+        # Multiple ways to handle different data types
+        if isinstance(prices, pd.Series):
             price_array = prices.values
+        elif isinstance(prices, pd.DataFrame):
+            price_array = prices.iloc[:, 0].values  # Take first column
+        elif isinstance(prices, np.ndarray):
+            price_array = prices
         else:
             price_array = np.array(prices)
         
-        # Ensure 1D array
-        price_array = price_array.flatten()
+        # Ensure 1D array and remove any NaN values
+        price_array = np.array(price_array).flatten()
+        price_array = price_array[~np.isnan(price_array)]
         
-        # Reshape for ripser
-        data = price_array.reshape(-1, 1)
+        # Check if we have enough data
+        if len(price_array) < 2:
+            return 0.5
+        
+        # Reshape for ripser - ensure it's float64
+        data = price_array.astype(np.float64).reshape(-1, 1)
         
         # Compute persistence diagrams
         dgms = ripser.ripser(data, maxdim=0)['dgms'][0]
@@ -130,15 +139,29 @@ def main():
     
     # Main content
     try:
-        # Download data
+        # Download data with better error handling
         with st.spinner(f"Downloading {symbol} data..."):
-            data = yf.download(symbol, period=period)
+            # Try to download data
+            data = yf.download(symbol, period=period, progress=False)
             
         if data.empty:
             st.error(f"No data found for symbol: {symbol}")
             return
         
-        prices = data['Close'].dropna()
+        # Handle multi-level columns from yfinance
+        if isinstance(data.columns, pd.MultiIndex):
+            # If multi-level columns, flatten them
+            data.columns = ['_'.join(col).strip() for col in data.columns.values]
+            close_col = [col for col in data.columns if 'Close' in col][0]
+            prices = data[close_col].dropna()
+        else:
+            # Single-level columns
+            prices = data['Close'].dropna()
+        
+        # Ensure we have enough data
+        if len(prices) < entropy_window + lookback_period:
+            st.error(f"Insufficient data for analysis. Need at least {entropy_window + lookback_period} days.")
+            return
         
         # Calculate entropy values
         st.subheader("📈 TDA Analysis")
