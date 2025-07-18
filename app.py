@@ -229,17 +229,41 @@ def core_dashboard(entropy_series, base_kelly, multiplier, equity, risk_per_shar
     else:
         st.error(f"**{action_text}**")
     
-    # Clear explanation with proper formatting
+    # Clear explanation with proper formatting - NO ASTERISKS
     st.markdown(f"""
     **Why this recommendation?** The noise level is **{descriptor}** (z-score: {z:.1f}). 
     This means recent price movements are {"more" if z > 0 else "less"} chaotic than usual.
-    
-    **Position Sizing:** Risk {adjusted_kelly*100:.1f}% of your ${equity:,} account = **${dollar_risk:,.0f}** maximum loss if stopped out.
-    
-    💡 **In simple terms:** If this trade goes wrong, you'll lose about **${dollar_risk:,.0f}** - that's {adjusted_kelly*100:.1f}% of your account.
     """)
     
-    # Additional details based on view level
+    # Position sizing in clean format
+    st.markdown("### 💰 Position Sizing Breakdown")
+    
+    pos_col1, pos_col2 = st.columns(2)
+    
+    with pos_col1:
+        st.markdown(f"""
+        **Account Risk:**
+        - Account Size: ${equity:,}
+        - Risk Percentage: {adjusted_kelly*100:.1f}%
+        - **Maximum Loss: ${dollar_risk:,.0f}**
+        """)
+    
+    with pos_col2:
+        if shares > 0:
+            total_position_value = shares * (dollar_risk / adjusted_kelly if adjusted_kelly > 0 else 0)
+            st.markdown(f"""
+            **Position Details:**
+            - Shares to Buy: **{shares:,} shares**
+            - Position Value: ${total_position_value:,.0f}
+            - Risk per Share: ${risk_per_share:.2f}
+            """)
+        else:
+            st.markdown("**Position Details:**\nEnter risk per share to calculate position size")
+    
+    # Simple explanation
+    st.info(f"💡 **Simple explanation:** If this trade goes wrong, you'll lose about ${dollar_risk:,.0f} - that's {adjusted_kelly*100:.1f}% of your ${equity:,} account.")
+    
+    # Enhanced position sizing section
     if view != "Basic":
         st.markdown("---")
         
@@ -259,6 +283,38 @@ def core_dashboard(entropy_series, base_kelly, multiplier, equity, risk_per_shar
                 st.write(f"• Base Risk Dial: {base_kelly*100:.1f}%")
                 st.write(f"• Market Adjustment: {multiplier:.2f}x")
                 st.write(f"• Final Risk Dial: {adjusted_kelly*100:.1f}%")
+                
+            # Add portfolio calculator
+            st.markdown("### 🎯 Portfolio Position Calculator")
+            
+            calc_col1, calc_col2, calc_col3 = st.columns(3)
+            
+            with calc_col1:
+                current_price = st.number_input(
+                    f"Current {symbol if 'symbol' in locals() else 'Stock'} Price ($)",
+                    min_value=0.01,
+                    value=100.0,
+                    step=0.01,
+                    help="Enter the current stock price"
+                )
+            
+            with calc_col2:
+                if shares > 0 and current_price > 0:
+                    position_value = shares * current_price
+                    st.metric("Position Value", f"${position_value:,.0f}")
+                    st.metric("Portfolio %", f"{(position_value/equity)*100:.1f}%")
+                else:
+                    st.metric("Position Value", "Enter price")
+                    st.metric("Portfolio %", "---")
+            
+            with calc_col3:
+                if current_price > 0:
+                    stop_price = current_price - risk_per_share
+                    st.metric("Stop Loss Price", f"${stop_price:.2f}")
+                    st.metric("Stop Distance", f"{(risk_per_share/current_price)*100:.1f}%")
+                else:
+                    st.metric("Stop Loss Price", "---")
+                    st.metric("Stop Distance", "---")
         
         elif view == "Advanced":
             st.markdown("### 🔬 Advanced Statistics")
@@ -270,11 +326,54 @@ def core_dashboard(entropy_series, base_kelly, multiplier, equity, risk_per_shar
             advanced_cols[3].metric("Maximum", f"{arr.max():.3f}")
             advanced_cols[4].metric("Multiplier", f"{multiplier:.2f}")
             
+            # Advanced portfolio analysis
+            st.markdown("### 🎯 Advanced Portfolio Calculator")
+            
+            adv_col1, adv_col2 = st.columns(2)
+            
+            with adv_col1:
+                current_price = st.number_input(
+                    f"Current {symbol if 'symbol' in locals() else 'Stock'} Price ($)",
+                    min_value=0.01,
+                    value=100.0,
+                    step=0.01,
+                    key="adv_price"
+                )
+                
+                portfolio_allocation = st.slider(
+                    "Target Portfolio Allocation (%)",
+                    min_value=1,
+                    max_value=50,
+                    value=10,
+                    help="What percentage of your portfolio should this position be?"
+                )
+            
+            with adv_col2:
+                if current_price > 0:
+                    # Calculate based on portfolio allocation
+                    target_position_value = equity * (portfolio_allocation / 100)
+                    target_shares = int(target_position_value / current_price)
+                    actual_risk = target_shares * risk_per_share
+                    risk_percentage = (actual_risk / equity) * 100
+                    
+                    st.markdown("**Portfolio Allocation Results:**")
+                    st.write(f"• Target Position: ${target_position_value:,.0f}")
+                    st.write(f"• Shares to Buy: {target_shares:,}")
+                    st.write(f"• Actual Risk: ${actual_risk:,.0f} ({risk_percentage:.1f}%)")
+                    st.write(f"• Stop Loss: ${current_price - risk_per_share:.2f}")
+                    
+                    # Risk comparison
+                    if risk_percentage > adjusted_kelly * 100:
+                        st.warning(f"⚠️ This allocation risks {risk_percentage:.1f}% vs recommended {adjusted_kelly*100:.1f}%")
+                    else:
+                        st.success(f"✅ Risk {risk_percentage:.1f}% is within recommended {adjusted_kelly*100:.1f}%")
+            
             st.markdown("**Interpretation Guide:**")
             st.info("""
             • **Z-Score Thresholds:** Green < 0.5, Transitional 0.5-1.3, Risk-Off > 1.3
             • **Noise Level:** Higher values = more chaotic price movements
             • **Risk Dial:** Automatically adjusts position size based on market conditions
+            • **Portfolio Allocation:** Shows position size vs recommended risk level
             """)
 
 def get_risk_signal(entropy_values, lookback=90):
