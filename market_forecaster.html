@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Forecaster - TDA Intelligence</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.27.2/axios.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .market-overview {
+            grid-column: 1 / -1;
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .indices-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .index-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+
+        .index-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+        }
+
+        .index-card.selected {
+            border-color: #667eea;
+            transform: translateY(-5px);
+        }
+
+        .index-card.bullish {
+            background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+            border-color: #28a745;
+        }
+
+        .index-card.bearish {
+            background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+            border-color: #dc3545;
+        }
+
+        .index-card.neutral {
+            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+            border-color: #ffc107;
+        }
+
+        .index-name {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .index-price {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .index-change {
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+        }
+
+        .positive { color: #28a745; }
+        .negative { color: #dc3545; }
+
+        .noise-level {
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+
+        .forecast-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .forecast-header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .forecast-header h2 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .market-mood {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .mood-bullish {
+            background: #28a745;
+            color: white;
+        }
+
+        .mood-neutral {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .mood-bearish {
+            background: #dc3545;
+            color: white;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .chart-panel {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .chart-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #333;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .recommendation-panel {
+            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .recommendation-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .recommendation-text {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: #555;
+        }
+
+        .controls {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+        }
+
+        .control-btn:hover, .control-btn.active {
+            background: rgba(255,255,255,0.3);
+            border-color: rgba(255,255,255,0.6);
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.2rem;
+            color: #666;
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .noise-gauge {
+            width: 100%;
+            height: 20px;
+            background: linear-gradient(to right, #28a745, #ffc107, #dc3545);
+            border-radius: 10px;
+            position: relative;
+            margin: 10px 0;
+        }
+
+        .noise-indicator {
+            position: absolute;
+            top: -5px;
+            width: 4px;
+            height: 30px;
+            background: #333;
+            border-radius: 2px;
+            transition: left 0.5s ease;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Market Forecaster</h1>
+            <p>Advanced TDA Intelligence for Major Market Indices</p>
+        </div>
+
+        <div class="controls">
+            <button class="control-btn active" onclick="setTimeframe('1D')">1 Day</button>
+            <button class="control-btn" onclick="setTimeframe('5D')">5 Days</button>
+            <button class="control-btn" onclick="setTimeframe('1M')">1 Month</button>
+            <button class="control-btn" onclick="setTimeframe('3M')">3 Months</button>
+            <button class="control-btn" onclick="setTimeframe('1Y')">1 Year</button>
+        </div>
+
+        <div class="dashboard">
+            <div class="market-overview">
+                <h2>📊 Major Indices Overview</h2>
+                <div class="indices-grid" id="indicesGrid">
+                    <!-- Indices will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="forecast-section">
+            <div class="forecast-header">
+                <h2>🔮 Market Forecast</h2>
+                <div class="market-mood mood-neutral" id="marketMood">
+                    ANALYZING...
+                </div>
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-panel">
+                    <div class="chart-title">Market Noise Levels</div>
+                    <canvas id="noiseChart"></canvas>
+                </div>
+                <div class="chart-panel">
+                    <div class="chart-title">Index Performance</div>
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-label">Market Sentiment</div>
+                    <div class="metric-value" id="sentiment">Neutral</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Volatility Index</div>
+                    <div class="metric-value" id="volatility">Medium</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Risk Level</div>
+                    <div class="metric-value" id="riskLevel">Moderate</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Forecast Confidence</div>
+                    <div class="metric-value" id="confidence">75%</div>
+                </div>
+            </div>
+
+            <div class="recommendation-panel">
+                <div class="recommendation-title">🎯 Trading Recommendation</div>
+                <div class="recommendation-text" id="recommendation">
+                    Analyzing market conditions and preparing forecast...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Market data simulation (in real app, this would come from APIs)
+        const majorIndices = {
+            'SPY': { name: 'S&P 500', price: 4235.12, change: 0.85, symbol: '📈' },
+            'QQQ': { name: 'NASDAQ', price: 352.67, change: -0.23, symbol: '💻' },
+            'DIA': { name: 'Dow Jones', price: 334.89, change: 0.12, symbol: '🏭' },
+            'IWM': { name: 'Russell 2000', price: 198.45, change: -0.45, symbol: '🏢' },
+            'VTI': { name: 'Total Market', price: 234.56, change: 0.67, symbol: '🌍' },
+            'EFA': { name: 'International', price: 78.90, change: -0.18, symbol: '🌏' }
+        };
+
+        let currentTimeframe = '1D';
+        let selectedIndex = 'SPY';
+        let noiseChart, performanceChart;
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeIndices();
+            createCharts();
+            updateForecast();
+            
+            // Simulate real-time updates
+            setInterval(updateMarketData, 5000);
+        });
+
+        function initializeIndices() {
+            const grid = document.getElementById('indicesGrid');
+            grid.innerHTML = '';
+
+            Object.entries(majorIndices).forEach(([symbol, data]) => {
+                const card = createIndexCard(symbol, data);
+                grid.appendChild(card);
+            });
+        }
+
+        function createIndexCard(symbol, data) {
+            const card = document.createElement('div');
+            card.className = 'index-card';
+            card.onclick = () => selectIndex(symbol);
+            
+            if (symbol === selectedIndex) {
+                card.classList.add('selected');
+            }
+
+            // Simulate noise level and sentiment
+            const noiseLevel = Math.random() * 3;
+            const sentiment = noiseLevel < 1 ? 'bullish' : noiseLevel > 2 ? 'bearish' : 'neutral';
+            card.classList.add(sentiment);
+
+            const changeClass = data.change >= 0 ? 'positive' : 'negative';
+            const changeSymbol = data.change >= 0 ? '▲' : '▼';
+
+            card.innerHTML = `
+                <div class="index-name">${data.symbol} ${data.name}</div>
+                <div class="index-price">$${data.price.toFixed(2)}</div>
+                <div class="index-change ${changeClass}">
+                    ${changeSymbol} ${Math.abs(data.change).toFixed(2)}%
+                </div>
+                <div class="noise-level">
+                    Noise: ${noiseLevel.toFixed(1)}
+                </div>
+                <div class="noise-gauge">
+                    <div class="noise-indicator" style="left: ${(noiseLevel/3)*100}%"></div>
+                </div>
+            `;
+
+            return card;
+        }
+
+        function selectIndex(symbol) {
+            selectedIndex = symbol;
+            initializeIndices();
+            updateCharts();
+            updateForecast();
+        }
+
+        function setTimeframe(timeframe) {
+            currentTimeframe = timeframe;
+            
+            // Update button states
+            document.querySelectorAll('.control-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            updateCharts();
+            updateForecast();
+        }
+
+        function createCharts() {
+            // Noise Chart
+            const noiseCtx = document.getElementById('noiseChart').getContext('2d');
+            noiseChart = new Chart(noiseCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Market Noise Level',
+                        data: [],
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 3,
+                            ticks: {
+                                callback: function(value) {
+                                    if (value < 1) return 'Calm';
+                                    if (value < 2) return 'Moderate';
+                                    return 'High';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+
+            // Performance Chart
+            const perfCtx = document.getElementById('performanceChart').getContext('2d');
+            performanceChart = new Chart(perfCtx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(majorIndices),
+                    datasets: [{
+                        label: 'Performance %',
+                        data: Object.values(majorIndices).map(d => d.change),
+                        backgroundColor: Object.values(majorIndices).map(d => 
+                            d.change >= 0 ? 'rgba(40, 167, 69, 0.8)' : 'rgba(220, 53, 69, 0.8)'
+                        ),
+                        borderColor: Object.values(majorIndices).map(d => 
+                            d.change >= 0 ? '#28a745' : '#dc3545'
+                        ),
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+
+            updateCharts();
+        }
+
+        function updateCharts() {
+            // Generate sample data based on timeframe
+            const dataPoints = getDataPointsForTimeframe(currentTimeframe);
+            
+            // Update noise chart
+            const noiseData = generateNoiseData(dataPoints);
+            noiseChart.data.labels = noiseData.labels;
+            noiseChart.data.datasets[0].data = noiseData.values;
+            noiseChart.update();
+
+            // Update performance chart (already updated in createCharts)
+            performanceChart.update();
+        }
+
+        function getDataPointsForTimeframe(timeframe) {
+            switch(timeframe) {
+                case '1D': return 24;
+                case '5D': return 120;
+                case '1M': return 30;
+                case '3M': return 90;
+                case '1Y': return 365;
+                default: return 30;
+            }
+        }
+
+        function generateNoiseData(points) {
+            const labels = [];
+            const values = [];
+            
+            for (let i = 0; i < points; i++) {
+                if (currentTimeframe === '1D' || currentTimeframe === '5D') {
+                    labels.push(`${i}:00`);
+                } else {
+                    const date = new Date();
+                    date.setDate(date.getDate() - (points - i));
+                    labels.push(date.toLocaleDateString());
+                }
+                
+                // Generate realistic noise data with some trend
+                const baseNoise = 1.2;
+                const volatility = 0.8;
+                const trend = Math.sin(i / points * Math.PI) * 0.5;
+                values.push(Math.max(0, baseNoise + trend + (Math.random() - 0.5) * volatility));
+            }
+            
+            return { labels, values };
+        }
+
+        function updateForecast() {
+            // Calculate overall market sentiment
+            const avgChange = Object.values(majorIndices).reduce((sum, data) => sum + data.change, 0) / Object.keys(majorIndices).length;
+            const avgNoise = Math.random() * 2 + 0.5; // Simulate noise calculation
+            
+            // Determine market mood
+            let mood, moodClass, sentiment, riskLevel, recommendation;
+            
+            if (avgChange > 0.3 && avgNoise < 1.5) {
+                mood = 'BULLISH';
+                moodClass = 'mood-bullish';
+                sentiment = 'Positive';
+                riskLevel = 'Low';
+                recommendation = '🚀 Market conditions are favorable. Consider increasing positions in growth assets. Low noise levels suggest stable trends ahead.';
+            } else if (avgChange < -0.3 || avgNoise > 2.5) {
+                mood = 'BEARISH';
+                moodClass = 'mood-bearish';
+                sentiment = 'Negative';
+                riskLevel = 'High';
+                recommendation = '🛡️ Market showing stress signals. Reduce position sizes and consider defensive assets. High noise levels indicate increased volatility.';
+            } else {
+                mood = 'NEUTRAL';
+                moodClass = 'mood-neutral';
+                sentiment = 'Neutral';
+                riskLevel = 'Moderate';
+                recommendation = '⚖️ Mixed market signals detected. Maintain current positions with careful monitoring. Wait for clearer directional signals.';
+            }
+
+            // Update UI elements
+            const moodElement = document.getElementById('marketMood');
+            moodElement.textContent = mood;
+            moodElement.className = `market-mood ${moodClass}`;
+            
+            document.getElementById('sentiment').textContent = sentiment;
+            document.getElementById('volatility').textContent = avgNoise > 2 ? 'High' : avgNoise > 1.5 ? 'Medium' : 'Low';
+            document.getElementById('riskLevel').textContent = riskLevel;
+            document.getElementById('confidence').textContent = `${Math.floor(70 + Math.random() * 20)}%`;
+            document.getElementById('recommendation').textContent = recommendation;
+        }
+
+        function updateMarketData() {
+            // Simulate real-time price updates
+            Object.keys(majorIndices).forEach(symbol => {
+                const change = (Math.random() - 0.5) * 0.1;
+                majorIndices[symbol].change += change;
+                majorIndices[symbol].price *= (1 + change / 100);
+            });
+            
+            initializeIndices();
+            updateCharts();
+            updateForecast();
+        }
+
+        // Add some visual flair
+        function addVisualEffects() {
+            // Add subtle animations and interactions
+            document.querySelectorAll('.metric-card').forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'scale(1.05)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'scale(1)';
+                });
+            });
+        }
+
+        // Initialize visual effects
+        setTimeout(addVisualEffects, 1000);
+    </script>
+</body>
+</html>
