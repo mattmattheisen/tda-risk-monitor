@@ -1,0 +1,64 @@
+name: Generate PDF Manual
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/generate-pdf.yml'
+  workflow_dispatch:
+
+jobs:
+  generate-pdf:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Install Pandoc and LaTeX
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pandoc texlive-latex-base texlive-fonts-recommended texlive-latex-extra
+        
+    - name: Generate PDF from Markdown
+      run: |
+        cd docs
+        pandoc manual.md -o manual.pdf \
+          --pdf-engine=pdflatex \
+          --variable=geometry:margin=1in \
+          --variable=fontsize:11pt \
+          --variable=documentclass:article \
+          --toc \
+          --toc-depth=2 \
+          --number-sections \
+          --highlight-style=tango \
+          --include-in-header=<(echo '\usepackage{fancyhdr}') \
+          --include-in-header=<(echo '\pagestyle{fancy}') \
+          --include-in-header=<(echo '\fancyhead[L]{TDA Risk Monitor}') \
+          --include-in-header=<(echo '\fancyhead[R]{\today}') \
+          --include-in-header=<(echo '\fancyfoot[C]{\thepage}') \
+          --metadata title="TDA Risk Monitor - User Manual" \
+          --metadata author="Trading System Documentation" \
+          --metadata date="$(date +'%B %d, %Y')"
+          
+    - name: Commit and push PDF
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add docs/manual.pdf
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Auto-generate PDF manual"
+          git push
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Upload PDF as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: user-manual-pdf
+        path: docs/manual.pdf
+        retention-days: 30
