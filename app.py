@@ -22,8 +22,17 @@ def calculate_persistence_entropy(prices, window=30):
         return np.random.uniform(0.5, 1.5)  # Mock entropy for demo
     
     try:
-        # Reshape prices for ripser
-        data = prices.values.reshape(-1, 1)
+        # Convert to clean numpy array
+        if hasattr(prices, 'values'):
+            price_array = prices.values
+        else:
+            price_array = np.array(prices)
+        
+        # Ensure 1D array
+        price_array = price_array.flatten()
+        
+        # Reshape for ripser
+        data = price_array.reshape(-1, 1)
         
         # Compute persistence diagrams
         dgms = ripser.ripser(data, maxdim=0)['dgms'][0]
