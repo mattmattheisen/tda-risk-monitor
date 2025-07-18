@@ -133,7 +133,11 @@ def main():
     
     with nav_col2:
         if st.button("🔔 Alerts", use_container_width=True):
-            st.info("Coming soon!")
+            st.switch_page("pages/email_alerts.py")
+    
+    # Add backtesting button
+    if st.sidebar.button("📈 Backtesting", use_container_width=True):
+        st.info("📈 Backtesting module coming soon!")
     
     st.sidebar.markdown("---")
     
