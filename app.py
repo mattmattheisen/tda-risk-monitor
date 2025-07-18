@@ -111,8 +111,23 @@ def status_badge(mood):
     }
     return f"<span style='background:{colors[mood]};color:white;padding:8px 16px;border-radius:20px;font-weight:600;font-size:16px;'>{mood}</span>"
 
+def get_noise_level_explanation(current_reading):
+    """Provide clear explanation of noise level ranges"""
+    if current_reading < 1.0:
+        return "🟢 Very Calm", "Markets are smooth and predictable. Good for trend following."
+    elif current_reading < 1.5:
+        return "🟢 Calm", "Markets are stable with normal fluctuations. Safe to trade."
+    elif current_reading < 2.0:
+        return "🟡 Moderate", "Markets showing some choppiness. Use caution."
+    elif current_reading < 2.5:
+        return "🟠 Elevated", "Markets are getting volatile. Reduce position sizes."
+    elif current_reading < 3.0:
+        return "🔴 High", "Markets are very choppy. Consider defensive positions."
+    else:
+        return "🔴 Extreme", "Markets are chaotic. Preserve capital, avoid new trades."
+
 def noise_gauge(current, arr_min, arr_max):
-    """Create a simple noise level gauge"""
+    """Create a more informative noise level gauge"""
     span = arr_max - arr_min
     if span == 0:
         pct = 0.5
@@ -121,18 +136,16 @@ def noise_gauge(current, arr_min, arr_max):
     
     pct = max(0, min(1, pct))
     
+    # Get level and explanation
+    level_desc, explanation = get_noise_level_explanation(current)
+    
     # Create a visual gauge using progress bar
     st.progress(pct)
     
-    # Add description
-    if pct < 0.3:
-        level = "🟢 Calm"
-    elif pct < 0.7:
-        level = "🟡 Moderate"
-    else:
-        level = "🔴 Wild"
-    
-    st.caption(f"{level} - Position: {pct*100:.0f}% between min and max")
+    # Add detailed description
+    st.caption(f"{level_desc}")
+    st.caption(f"📊 Range: {explanation}")
+    st.caption(f"📈 Position vs history: {pct*100:.0f}% (Min: {arr_min:.2f}, Max: {arr_max:.2f})")
 
 def core_dashboard(entropy_series, base_kelly, multiplier, equity, risk_per_share, view="Basic"):
     """Main dashboard with user-friendly interface"""
@@ -171,12 +184,20 @@ def core_dashboard(entropy_series, base_kelly, multiplier, equity, risk_per_shar
     
     with col2:
         st.markdown("**📈 Noise Level**")
+        
+        # Get noise level explanation
+        level_desc, explanation = get_noise_level_explanation(current)
+        
         st.metric(
             label="Current Reading", 
             value=f"{current:.2f}",
             delta=f"{z:.1f}σ from average",
-            help="Higher numbers = more chaotic price movements"
+            help="Noise Level measures market chaos: 0-1.5=Calm, 1.5-2.5=Moderate, 2.5+=High"
         )
+        
+        # Show the level description prominently
+        st.markdown(f"**{level_desc}**")
+        st.caption(explanation)
         
         # Add noise gauge
         noise_gauge(current, arr.min(), arr.max())
@@ -208,12 +229,14 @@ def core_dashboard(entropy_series, base_kelly, multiplier, equity, risk_per_shar
     else:
         st.error(f"**{action_text}**")
     
-    # Explanation
+    # Clear explanation with proper formatting
     st.markdown(f"""
-    **Why?** The noise level is **{descriptor}** (z-score: {z:.1f}). 
+    **Why this recommendation?** The noise level is **{descriptor}** (z-score: {z:.1f}). 
     This means recent price movements are {"more" if z > 0 else "less"} chaotic than usual.
     
-    **Position Sizing:** Risk {adjusted_kelly*100:.1f}% of your ${equity:,} account = **${dollar_risk:,.0f}** maximum loss.
+    **Position Sizing:** Risk {adjusted_kelly*100:.1f}% of your ${equity:,} account = **${dollar_risk:,.0f}** maximum loss if stopped out.
+    
+    💡 **In simple terms:** If this trade goes wrong, you'll lose about **${dollar_risk:,.0f}** - that's {adjusted_kelly*100:.1f}% of your account.
     """)
     
     # Additional details based on view level
@@ -453,21 +476,61 @@ def main():
             st.plotly_chart(fig_price, use_container_width=True)
         
         with chart_tab2:
-            # Noise level chart with zones
+            # Interactive noise level chart with controls
+            st.markdown("**📊 Customize your view:**")
+            
+            # Time range selector
+            time_col1, time_col2, time_col3 = st.columns(3)
+            
+            with time_col1:
+                chart_period = st.selectbox(
+                    "Time Range", 
+                    ["Last 30 days", "Last 60 days", "Last 90 days", "All data"],
+                    index=2
+                )
+            
+            with time_col2:
+                show_zones = st.checkbox("Show Risk Zones", value=True)
+            
+            with time_col3:
+                show_average = st.checkbox("Show Average Line", value=True)
+            
+            # Filter data based on selection
+            if chart_period == "Last 30 days":
+                chart_data = df.tail(30)
+            elif chart_period == "Last 60 days":
+                chart_data = df.tail(60)
+            elif chart_period == "Last 90 days":
+                chart_data = df.tail(90)
+            else:
+                chart_data = df
+            
+            # Create interactive noise chart
             fig_noise = go.Figure()
             
             # Add noise level line
             fig_noise.add_trace(
                 go.Scatter(
-                    x=df['Date'], 
-                    y=df['Noise_Level'], 
+                    x=chart_data['Date'], 
+                    y=chart_data['Noise_Level'], 
                     name='Noise Level',
-                    line=dict(color='red', width=2)
+                    line=dict(color='red', width=3),
+                    hovertemplate='<b>Date:</b> %{x}<br><b>Noise Level:</b> %{y:.2f}<extra></extra>'
                 )
             )
             
-            # Add threshold zones if we have enough data
-            if len(entropy_values) >= lookback_period:
+            # Add average line if requested
+            if show_average and len(chart_data) > 0:
+                avg_noise = chart_data['Noise_Level'].mean()
+                fig_noise.add_hline(
+                    y=avg_noise,
+                    line_dash="dot",
+                    line_color="blue",
+                    annotation_text=f"Average: {avg_noise:.2f}"
+                )
+            
+            # Add threshold zones if requested and we have enough data
+            if show_zones and len(entropy_values) >= lookback_period:
                 recent_entropy = entropy_values[-lookback_period:]
                 thresh_hi = np.percentile(recent_entropy, 90)
                 thresh_lo = np.percentile(recent_entropy, 70)
@@ -477,34 +540,79 @@ def main():
                     y=thresh_hi, 
                     line_dash="dash", 
                     line_color="red",
-                    annotation_text="High Risk Zone"
+                    annotation_text="⚠️ Risk-Off Zone"
                 )
                 fig_noise.add_hline(
                     y=thresh_lo, 
                     line_dash="dash", 
                     line_color="green",
-                    annotation_text="Safe Trading Zone"
+                    annotation_text="✅ Safe Zone"
                 )
                 
                 # Add colored background zones
+                max_y = max(chart_data['Noise_Level']) * 1.1
+                
                 fig_noise.add_hrect(
                     y0=0, y1=thresh_lo, 
                     fillcolor="green", opacity=0.1,
-                    annotation_text="Safe Zone", annotation_position="top left"
+                    annotation_text="Safe Trading Zone", 
+                    annotation_position="top left"
                 )
                 fig_noise.add_hrect(
-                    y0=thresh_hi, y1=max(entropy_values)*1.1, 
+                    y0=thresh_lo, y1=thresh_hi,
+                    fillcolor="yellow", opacity=0.1,
+                    annotation_text="Caution Zone",
+                    annotation_position="top left"
+                )
+                fig_noise.add_hrect(
+                    y0=thresh_hi, y1=max_y, 
                     fillcolor="red", opacity=0.1,
-                    annotation_text="Danger Zone", annotation_position="top left"
+                    annotation_text="Danger Zone", 
+                    annotation_position="top left"
                 )
             
+            # Add range selector buttons
             fig_noise.update_layout(
                 title="Market Noise Level Over Time",
                 xaxis_title="Date",
                 yaxis_title="Noise Level",
-                height=400
+                height=500,
+                hovermode='x unified',
+                xaxis=dict(
+                    rangeselector=dict(
+                        buttons=list([
+                            dict(count=7, label="7d", step="day", stepmode="backward"),
+                            dict(count=30, label="30d", step="day", stepmode="backward"),
+                            dict(count=60, label="60d", step="day", stepmode="backward"),
+                            dict(step="all", label="All")
+                        ])
+                    ),
+                    rangeslider=dict(visible=True),
+                    type="date"
+                )
             )
+            
             st.plotly_chart(fig_noise, use_container_width=True)
+            
+            # Add interpretation help
+            st.markdown("**🔍 How to read this chart:**")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("""
+                **🟢 Green Zone (Safe):**
+                - Low noise = smooth trends
+                - Good for trend following
+                - Use normal position sizes
+                """)
+            
+            with col2:
+                st.markdown("""
+                **🔴 Red Zone (Danger):**
+                - High noise = chaotic markets
+                - Avoid new positions
+                - Consider taking profits
+                """)
         
         # Export section (only in Advanced view)
         if view == "Advanced":
@@ -540,11 +648,18 @@ def main():
             - Consider taking profits
             - Preserve capital for better opportunities
             
-            ### 📊 Understanding the Numbers
+            ### 📊 Understanding Noise Levels
             
-            **Noise Level:** Measures how chaotic recent price movements are
-            - Low numbers = smooth, predictable trends
-            - High numbers = choppy, unpredictable movements
+            **The "Current Reading" number means:**
+            
+            | Range | Level | What It Means | Action |
+            |-------|-------|---------------|--------|
+            | 0.0 - 1.0 | 🟢 Very Calm | Markets are super smooth | Trade full size, ride trends |
+            | 1.0 - 1.5 | 🟢 Calm | Normal market conditions | Safe to trade normally |
+            | 1.5 - 2.0 | 🟡 Moderate | Some choppiness appearing | Use caution, smaller sizes |
+            | 2.0 - 2.5 | 🟠 Elevated | Markets getting volatile | Reduce positions by 30-50% |
+            | 2.5 - 3.0 | 🔴 High | Very choppy conditions | Defensive mode, tight stops |
+            | 3.0+ | 🔴 Extreme | Chaotic market conditions | Preserve capital, avoid trades |
             
             **Risk Dial:** Automatically adjusts your position size
             - Higher during safe periods
