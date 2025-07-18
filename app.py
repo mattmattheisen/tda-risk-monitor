@@ -120,6 +120,23 @@ def main():
     # Sidebar controls
     st.sidebar.header("📊 Configuration")
     
+    # Navigation
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🔗 Navigation")
+    
+    # Create columns for navigation buttons
+    nav_col1, nav_col2 = st.sidebar.columns(2)
+    
+    with nav_col1:
+        if st.button("📊 Multi-Asset", use_container_width=True):
+            st.switch_page("pages/multi_asset_dashboard.py")
+    
+    with nav_col2:
+        if st.button("🔔 Alerts", use_container_width=True):
+            st.info("Coming soon!")
+    
+    st.sidebar.markdown("---")
+    
     # Asset selection
     symbol = st.sidebar.text_input("Asset Symbol", value="SPY", help="Enter a valid ticker symbol")
     
@@ -139,9 +156,8 @@ def main():
     
     # Main content
     try:
-        # Download data with better error handling
+        # Download data
         with st.spinner(f"Downloading {symbol} data..."):
-            # Try to download data
             data = yf.download(symbol, period=period, progress=False)
             
         if data.empty:
@@ -150,12 +166,10 @@ def main():
         
         # Handle multi-level columns from yfinance
         if isinstance(data.columns, pd.MultiIndex):
-            # If multi-level columns, flatten them
             data.columns = ['_'.join(col).strip() for col in data.columns.values]
             close_col = [col for col in data.columns if 'Close' in col][0]
             prices = data[close_col].dropna()
         else:
-            # Single-level columns
             prices = data['Close'].dropna()
         
         # Ensure we have enough data
